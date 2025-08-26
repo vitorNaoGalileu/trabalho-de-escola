@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Palavra Cruzada</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #111827;
+            --muted: #94a3b8;
+            --text: #e5e7eb;
+            --accent: #22c55e;
+            --accent-2: #3b82f6;
+            --danger: #ef4444;
+            --grid: #1f2937;
+            --cell: #0b1220;
+            --block: #0b0f1a;
+            --highlight: #f59e0b;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; font-family: system-ui, Segoe UI, Roboto, Ubuntu, Arial, sans-serif; background: linear-gradient(135deg, var(--bg), #030712); color: var(--text); display: grid; place-items: center; padding: 24px; }
+        .app { width: min(1100px, 100%); display: grid; gap: 16px; grid-template-columns: 1.2fr 1fr; }
+        @media (max-width: 900px) { .app { grid-template-columns: 1fr; } }
+        .board-wrap { background: rgba(15, 79, 139, 0.6); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4); }
+        .board { display: grid; gap: 2px; background: var(--grid); border: 2px solid var(--grid); border-radius: 12px; padding: 2px; }
+        .cell { width: 38px; height: 38px; display: grid; place-items: center; position: relative; }
+        .cell input { width: 100%; height: 100%; border: none; outline: none; text-transform: uppercase; text-align: center; font-weight: 700; font-size: 18px; color: var(--text); background: var(--cell); border-radius: 8px; transition: 0.15s; }
+        .cell input:focus { box-shadow: 0 0 0 2px var(--accent-2) inset; }
+        .cell.block { background: var(--block); }
+        .cell.block::after { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, #000 0%, #111 100%); border-radius: 8px; }
+        .num { position: absolute; top: 4px; left: 6px; font-size: 10px; color: var(--muted); }
+        .panel { background: rgba(17, 87, 52, 0.6); border: 1px solid #1f2937; border-radius: 16px; padding: 16px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4); display: grid; gap: 12px; }
+        .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+        button { padding: 10px 14px; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; color: #0b0f1a; background: var(--text); transition: transform 0.06s ease, box-shadow 0.2s; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25); }
+        button:hover { transform: translateY(-1px); }
+        .primary { background: linear-gradient(135deg, var(--accent-2), #06b6d4); color: white; }
+        .success { background: linear-gradient(135deg, var(--accent), #16a34a); color: white; }
+        .danger { background: linear-gradient(135deg, var(--danger), #b91c1c); color: white; }
+        .ghost { background: transparent; color: var(--text); border: 1px solid #334155; }
+        h1 { margin: 0 0 4px 0; font-size: 22px; letter-spacing: 0.3px; }
+        .sub { color: var(--muted); font-size: 12px; }
+        .clues { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .clues h3 { margin: 10px 0 6px 0; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+        .clues ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+        .clues li { background: rgba(2, 6, 23, 0.5); border: 1px solid #1f2937; padding: 10px 12px; border-radius: 12px; }
+        .clues li.active { outline: 2px solid var(--highlight); }
+        .badge { background: rgba(59, 130, 246, 0.15); color: #cfe1ff; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 11px; margin-right: 6px; }
+        .legend { font-size: 12px; color: var(--muted); }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="board-wrap">
+        <h1>Palavra Cruzada</h1>
+        <div class="sub">
+            Dica: clique em um número ou célula para começar. Use as setas para navegar. Backspace apaga. Barra de espaço alterna horizontal/vertical.
+        </div>
+        <div id="board" class="board"></div>
+        <div class="controls" style="margin-top: 12px">
+            <button class="primary" id="btnCheck">Verificar</button>
+            <button class="success" id="btnReveal">Revelar letra</button>
+            <button class="ghost" id="btnClear">Limpar tudo</button>
+            <button class="danger" id="btnSolve">Resolver</button>
+        </div>
+        <div style="margin-top: 8px" class="legend">para o trabalho de matematica :B (feito por vitor maché :B) com 355 LINHAS DE CODIGO :(</div>
+    </div>
+
+    <div class="panel">
+        <h2 style="margin: 0">Pistas</h2>
+        <div class="clues">
+            <div>
+                <h3>Horizontais</h3>
+                <ul id="cluesAcross"></ul>
+            </div>
+            <div>
+                <h3>Verticais</h3>
+                <ul id="cluesDown"></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SIZE = 16;
+const WORDS = [
+    { row: 0, col: 0, dir: 'A', answer: 'QUADRADO', clue: '(1) Polígono de 4 lados iguais e ângulos retos.' },
+    { row: 2, col: 0, dir: 'A', answer: 'HEXAGONO', clue: '(2) Polígono com 6 lados.' },
+    { row: 4, col: 0, dir: 'A', answer: 'LADOS', clue: '(3) Segmentos que formam um polígono.' },
+    { row: 6, col: 0, dir: 'A', answer: 'TRIANGULO', clue: '(4) Polígono de 3 lados.' },
+    { row: 8, col: 0, dir: 'A', answer: 'OCTOGONO', clue: '(5) Polígono com 8 lados.' },
+    { row: 10, col: 0, dir: 'A', answer: 'PENTAGONO', clue: '(6) Polígono de 5 lados.' },
+    { row: 12, col: 0, dir: 'A', answer: 'ISOSCELES', clue: '(7) Triângulo com dois lados iguais.' },
+    { row: 0, col: 7, dir: 'D', answer: 'VERTICES', clue: '(8) Pontos de encontro de lados de um polígono.' },
+    { row: 0, col: 2, dir: 'D', answer: 'EQUILATERO', clue: '(9) Triângulo com todos os lados iguais.' },
+    { row: 2, col: 4, dir: 'D', answer: 'ANGULOS', clue: '(10) Aberturas formadas entre dois lados.' },
+    { row: 6, col: 5, dir: 'D', answer: 'ESCALENO', clue: '(11) Triângulo com todos os lados diferentes.' },
+];
+
+const boardEl = document.getElementById('board');
+const cluesAcrossEl = document.getElementById('cluesAcross');
+const cluesDownEl = document.getElementById('cluesDown');
+const grid = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+const cellEntries = Array.from({ length: SIZE }, () => Array(SIZE).fill(null).map(() => []));
+
+for (const w of WORDS) {
+    const dr = w.dir === 'A' ? 0 : 1;
+    const dc = w.dir === 'A' ? 1 : 0;
+    for (let i = 0; i < w.answer.length; i++) {
+        const r = w.row + dr * i;
+        const c = w.col + dc * i;
+        if (r < 0 || c < 0 || r >= SIZE || c >= SIZE) continue;
+        const ch = w.answer[i].toUpperCase();
+        grid[r][c] = ch;
+        cellEntries[r][c].push(w);
+    }
+}
+
+boardEl.style.gridTemplateColumns = `repeat(${SIZE}, 38px)`;
+const inputs = [];
+
+function cellId(r, c) { return `r${r}c${c}`; }
+
+for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        if (grid[r][c] === null) {
+            cell.classList.add('block');
+        } else {
+            const inp = document.createElement('input');
+            inp.maxLength = 1;
+            inp.autocomplete = 'off';
+            inp.inputMode = 'latin';
+            inp.dataset.row = r;
+            inp.dataset.col = c;
+            inp.id = cellId(r, c);
+            cell.appendChild(inp);
+            inputs.push(inp);
+
+            const nums = startNumbersAt(r, c);
+            if (nums.length) {
+                const num = document.createElement('div');
+                num.className = 'num';
+                num.textContent = nums.join('/');
+                cell.appendChild(num);
+                num.style.cursor = 'pointer';
+                num.addEventListener('click', () => focusWordAt(r, c));
+            }
+            cell.addEventListener('click', () => focusWordAt(r, c));
+        }
+        boardEl.appendChild(cell);
+    }
+}
+
+let focusDir = 'A';
+let focusCells = [];
+
+function startNumbersAt(r, c) {
+    const arr = [];
+    for (const [idx, w] of WORDS.entries()) {
+        if (w.row === r && w.col === c) arr.push(idx + 1);
+    }
+    return arr;
+}
+
+function focusWordAt(r, c, dir) {
+    const targetWords = cellEntries[r][c];
+    let wordToFocus;
+    if (dir) {
+        wordToFocus = targetWords.find(w => w.dir === dir) || targetWords[0];
+    } else wordToFocus = targetWords[0];
+    if (!wordToFocus) return;
+    focusCells = cellsOf(wordToFocus);
+    focusDir = wordToFocus.dir;
+    highlightClue(wordToFocus);
+    const firstEmpty = focusCells.find(({ r, c }) => !valueAt(r, c));
+    const target = firstEmpty || focusCells[0];
+    document.getElementById(cellId(target.r, target.c)).focus();
+}
+
+function cellsOf(w) {
+    const dr = w.dir === 'A' ? 0 : 1;
+    const dc = w.dir === 'A' ? 1 : 0;
+    return Array.from({ length: w.answer.length }, (_, i) => ({ r: w.row + dr * i, c: w.col + dc * i }));
+}
+
+function valueAt(r, c) {
+    const el = document.getElementById(cellId(r, c));
+    return el ? (el.value || '').toUpperCase() : '';
+}
+
+function moveFocus(r, c, step = 1) {
+    const idx = focusCells.findIndex(pos => pos.r === r && pos.c === c);
+    if (idx === -1) return;
+    const next = focusCells[idx + step];
+    if (next) document.getElementById(cellId(next.r, next.c)).focus();
+}
+
+for (const inp of inputs) {
+    inp.addEventListener('keydown', (e) => {
+        const r = +inp.dataset.row, c = +inp.dataset.col;
+        if (e.key === 'Backspace') {
+            if (!inp.value) moveFocus(r, c, -1);
+            return;
+        }
+        if (e.key === ' ') {
+            e.preventDefault();
+            focusWordAt(r, c, focusDir === 'A' ? 'D' : 'A');
+            return;
+        }
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+            e.preventDefault();
+            if (e.key === 'ArrowLeft') focusWordAt(r, c, 'A'), moveFocus(r, c, -1);
+            if (e.key === 'ArrowRight') focusWordAt(r, c, 'A'), moveFocus(r, c, 1);
+            if (e.key === 'ArrowUp') focusWordAt(r, c, 'D'), moveFocus(r, c, -1);
+            if (e.key === 'ArrowDown') focusWordAt(r, c, 'D'), moveFocus(r, c, 1);
+        }
+    });
+    inp.addEventListener('input', () => {
+        inp.value = (inp.value || '').toUpperCase().replace(/[^A-ZÁÂÃÀÉÊÍÓÔÕÚÇ]/g, '').slice(0, 1);
+        const r = +inp.dataset.row, c = +inp.dataset.col;
+        moveFocus(r, c, 1);
+    });
+}
+
+function renderClues() {
+    cluesAcrossEl.innerHTML = '';
+    cluesDownEl.innerHTML = '';
+    WORDS.forEach((w, i) => {
+        const li = document.createElement('li');
+        li.id = `clue-${i + 1}`;
+        li.innerHTML = `<span class="badge">${i + 1}</span>${w.clue} <span style="opacity:.6">(${w.answer.length})</span>`;
+        li.addEventListener('click', () => focusWordAt(w.row, w.col, w.dir));
+        (w.dir === 'A' ? cluesAcrossEl : cluesDownEl).appendChild(li);
+    });
+}
+
+function highlightClue(entry) {
+    document.querySelectorAll('.clues li').forEach(li => li.classList.remove('active'));
+    const idx = WORDS.indexOf(entry);
+    const el = document.getElementById(`clue-${idx + 1}`);
+    if (el) el.classList.add('active');
+    document.querySelectorAll('.cell input').forEach(inp => (inp.style.outline = 'none'));
+    for (const { r, c } of cellsOf(entry)) {
+        const el2 = document.getElementById(cellId(r, c));
+        if (el2) el2.style.outline = '2px solid var(--highlight)';
+    }
+    setTimeout(() => {
+        for (const { r, c } of cellsOf(entry)) {
+            const el2 = document.getElementById(cellId(r, c));
+            if (el2) el2.style.outline = 'none';
+        }
+    }, 350);
+}
+
+document.getElementById('btnCheck').addEventListener('click', () => {
+    let correct = 0, total = 0, wrongCells = [];
+    for (const w of WORDS) {
+        const cells = cellsOf(w);
+        const attempt = cells.map(({ r, c }) => valueAt(r, c) || ' ').join('');
+        total++;
+        if (attempt === w.answer) correct++;
+        else wrongCells.push(...cells.filter(({ r, c }, i) => (valueAt(r, c) || '') !== w.answer[i]));
+    }
+    wrongCells.forEach(({ r, c }) => {
+        const el = document.getElementById(cellId(r, c));
+        el.style.background = 'rgba(239,68,68,.25)';
+        setTimeout(() => (el.style.background = ''), 600);
+    });
+    alert(`Você acertou ${correct} de ${total} palavras.`);
+});
+
+document.getElementById('btnReveal').addEventListener('click', () => {
+    const el = document.activeElement;
+    if (!el || el.tagName !== 'INPUT') return alert('Clique em uma célula primeiro.');
+    const r = +el.dataset.row, c = +el.dataset.col;
+    el.value = grid[r][c] || '';
+});
+
+document.getElementById('btnClear').addEventListener('click', () => {
+    document.querySelectorAll('.cell input').forEach(i => (i.value = ''));
+});
+
+document.getElementById('btnSolve').addEventListener('click', () => {
+    document.querySelectorAll('.cell input').forEach(inp => {
+        const r = +inp.dataset.row, c = +inp.dataset.col;
+        inp.value = grid[r][c] || '';
+    });
+});
+
+renderClues();
+focusWordAt(0, 0, 'A');
+</script>
+</body>
+</html>
